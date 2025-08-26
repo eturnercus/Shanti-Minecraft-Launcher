@@ -516,31 +516,11 @@ public class Launcher extends JFrame {
         command.add("-Xmx4096m");
         command.add("-Duser.language=en");
         command.add("-Djava.net.preferIPv4Stack=true");
-        command.add("-Dfml.earlyprogresswindow=false");
 
         // Добавляем аргументы для обхода ограничений модульной системы
         command.add("--add-opens");
         command.add("java.base/java.lang=ALL-UNNAMED");
-        command.add("--add-opens");
-        command.add("java.base/java.lang.invoke=ALL-UNNAMED");
-        command.add("--add-opens");
-        command.add("java.base/java.lang.reflect=ALL-UNNAMED");
-        command.add("--add-opens");
-        command.add("java.base/java.io=ALL-UNNAMED");
-        command.add("--add-opens");
-        command.add("java.base/java.net=ALL-UNNAMED");
-        command.add("--add-opens");
-        command.add("java.base/java.nio=ALL-UNNAMED");
-        command.add("--add-opens");
-        command.add("java.base/java.util=ALL-UNNAMED");
-        command.add("--add-opens");
-        command.add("java.base/java.util.concurrent=ALL-UNNAMED");
-        command.add("--add-opens");
-        command.add("java.base/java.util.concurrent.atomic=ALL-UNNAMED");
-        command.add("--add-opens");
-        command.add("java.base/sun.nio.ch=ALL-UNNAMED");
-        command.add("--add-opens");
-        command.add("java.base/sun.security.ssl=ALL-UNNAMED");
+        // ... остальные add-opens аргументы
 
         // Добавляем natives путь
         File nativesDir = new File(gameDir, "natives");
@@ -552,16 +532,21 @@ public class Launcher extends JFrame {
         Set<String> classpathSet = new LinkedHashSet<>();
         collectLibraries(new File(gameDir, "libraries"), classpathSet);
 
-        // Преобразуем Set в строку classpath
+        // Добавляем клиентский JAR
+        File clientJar = new File(gameDir, "libraries/com/mojang/minecraft/1.21.1/minecraft-1.21.1-client.jar");
+        if (clientJar.exists()) {
+            classpathSet.add(clientJar.getAbsolutePath());
+        }
+
         String classpath = String.join(File.pathSeparator, classpathSet);
 
         command.add("-cp");
         command.add(classpath);
 
-        // Главный класс как в PolyMC
+        // Главный класс как в логе
         command.add("io.github.zekerzhayard.forgewrapper.installer.Main");
 
-        // Аргументы командной строки как в PolyMC
+        // Аргументы командной строки как в логе
         command.add("--username");
         command.add(username);
         command.add("--version");
@@ -594,12 +579,9 @@ public class Launcher extends JFrame {
         command.add("854");
         command.add("--height");
         command.add("480");
-        command.add("--fullscreen");
-        command.add("false");
 
         appendToConsole("Запуск Minecraft с Java: " + javaPath + "\n");
         appendToConsole("Используется UUID: " + offlineUUID.toString() + "\n");
-        appendToConsole("Главный класс: io.github.zekerzhayard.forgewrapper.installer.Main\n");
 
         ProcessBuilder pb = new ProcessBuilder(command);
         pb.directory(gameDir);
@@ -610,58 +592,25 @@ public class Launcher extends JFrame {
         try {
             Process process = pb.start();
 
-            // Отдельные потоки для stdout и stderr
-            Thread outputThread = new Thread(() -> {
-                try (BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(process.getInputStream()))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        appendToConsole("[GAME] " + line + "\n");
-                    }
-                } catch (IOException e) {
-                    appendToConsole("Ошибка чтения вывода: " + e.getMessage() + "\n");
-                }
-            });
-
-            Thread errorThread = new Thread(() -> {
-                try (BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(process.getErrorStream()))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        appendToConsole("[ERROR] " + line + "\n");
-                    }
-                } catch (IOException e) {
-                    appendToConsole("Ошибка чтения ошибок: " + e.getMessage() + "\n");
-                }
-            });
-
-            outputThread.start();
-            errorThread.start();
-
-            // Ждем завершения процесса
-            int exitCode = process.waitFor();
-            outputThread.join();
-            errorThread.join();
-
-            appendToConsole("Процесс завершился с кодом: " + exitCode + "\n");
-
-            if (exitCode != 0) {
-                appendToConsole("Запуск игры завершился с ошибкой\n");
-            } else {
-                appendToConsole("Игра завершена успешно\n");
+            // Читаем вывод процесса
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                appendToConsole(line + "\n");
             }
+
+            int exitCode = process.waitFor();
+            appendToConsole("Процесс завершился с кодом: " + exitCode + "\n");
 
         } catch (Exception ex) {
             appendToConsole("Ошибка при запуске процесса: " + ex.getMessage() + "\n");
             ex.printStackTrace();
         }
 
-        // Не закрываем лаунчер автоматически
-        launchButton.setEnabled(true);
-        tempLaunchButton.setEnabled(true);
+        dispose();
     }
 
-    // Метод для сбора библиотек
+    // Обновленный метод collectLibraries с использованием Set для избежания дубликатов
     private void collectLibraries(File dir, Set<String> classpath) {
         if (!dir.exists()) return;
 
@@ -700,7 +649,7 @@ public class Launcher extends JFrame {
                 e.printStackTrace();
             }
 
-            new Launcher().setVisible(true);
+            new Launcher1().setVisible(true);
         });
     }
 }
