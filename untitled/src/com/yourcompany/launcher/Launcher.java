@@ -301,8 +301,8 @@ public class Launcher extends JFrame {
                     appendToConsole("Распаковка архива...\n");
                     unzipFile(clientZip, gameDir);
 
-                    // Удаляем конфликтующие версии ASM после распаковки
-                    removeConflictASM(new File(gameDir, "libraries"));
+                    // Удаляем конфликтующие версии библиотек после распаковки
+                    removeConflictLibraries(new File(gameDir, "libraries"));
                 }
 
                 appendToConsole("Запуск игры...\n");
@@ -317,8 +317,8 @@ public class Launcher extends JFrame {
         }).start();
     }
 
-    // Метод для удаления конфликтующих версий ASM
-    private void removeConflictASM(File librariesDir) {
+    // Метод для удаления конфликтующих библиотек
+    private void removeConflictLibraries(File librariesDir) {
         if (!librariesDir.exists()) return;
 
         // Удаляем старую версию ASM (9.3), которая конфликтует с новой (9.8)
@@ -326,6 +326,21 @@ public class Launcher extends JFrame {
         if (asm93Dir.exists()) {
             appendToConsole("Удаляем конфликтующую версию ASM: 9.3\n");
             deleteRecursive(asm93Dir);
+        }
+
+        // Удаляем старые версии Guava, которые могут конфликтовать
+        File guavaDir = new File(librariesDir, "com/google/guava");
+        if (guavaDir.exists() && guavaDir.isDirectory()) {
+            File[] versions = guavaDir.listFiles();
+            if (versions != null) {
+                for (File versionDir : versions) {
+                    // Оставляем только версию 32.1.2-jre
+                    if (!versionDir.getName().equals("32.1.2-jre")) {
+                        appendToConsole("Удаляем конфликтующую версию Guava: " + versionDir.getName() + "\n");
+                        deleteRecursive(versionDir);
+                    }
+                }
+            }
         }
     }
 
@@ -397,7 +412,7 @@ public class Launcher extends JFrame {
             long localFileSize = outputFile.length();
             appendToConsole("Размер локального файла: " + localFileSize + " байт\n");
 
-            if (localFileSize == serverFileSize) {
+            if (localSize == serverFileSize) {
                 appendToConsole("Файл актуален, пропускаем скачивание\n");
                 progressBar.setValue(100);
                 return;
@@ -484,21 +499,7 @@ public class Launcher extends JFrame {
     }
 
     private void launchMinecraft(File gameDir, String username) throws IOException {
-        StringBuilder classpath = new StringBuilder();
-        collectLibraries(new File(gameDir, "libraries"), classpath);
-
-        File clientJar = findClientJar(gameDir);
-        if (clientJar != null) {
-            if (classpath.length() > 0) {
-                classpath.append(File.pathSeparator);
-            }
-            classpath.append(clientJar.getAbsolutePath());
-        }
-
-        if (classpath.length() == 0) {
-            throw new IOException("Не найдено библиотек или клиентского JAR-файла");
-        }
-
+        // Создаем assets директорию, если её нет
         File assetsDir = new File(gameDir, "assets");
         if (!assetsDir.exists()) {
             assetsDir.mkdirs();
@@ -512,23 +513,59 @@ public class Launcher extends JFrame {
         command.add("-Xms512m");
         command.add("-Xmx4096m");
         command.add("-Duser.language=en");
-
-        // Для NeoForge добавляем специфичные параметры
-        command.add("-Dfml.earlyprogresswindow=false");
         command.add("-Djava.net.preferIPv4Stack=true");
+        command.add("-Dfml.earlyprogresswindow=false");
 
+        // Добавляем аргументы для обхода ограничений модульной системы
+        command.add("--add-opens");
+        command.add("java.base/java.lang=ALL-UNNAMED");
+        command.add("--add-opens");
+        command.add("java.base/java.lang.invoke=ALL-UNNAMED");
+        command.add("--add-opens");
+        command.add("java.base/java.lang.reflect=ALL-UNNAMED");
+        command.add("--add-opens");
+        command.add("java.base/java.io=ALL-UNNAMED");
+        command.add("--add-opens");
+        command.add("java.base/java.net=ALL-UNNAMED");
+        command.add("--add-opens");
+        command.add("java.base/java.nio=ALL-UNNAMED");
+        command.add("--add-opens");
+        command.add("java.base/java.util=ALL-UNNAMED");
+        command.add("--add-opens");
+        command.add("java.base/java.util.concurrent=ALL-UNNAMED");
+        command.add("--add-opens");
+        command.add("java.base/java.util.concurrent.atomic=ALL-UNNAMED");
+        command.add("--add-opens");
+        command.add("java.base/sun.nio.ch=ALL-UNNAMED");
+        command.add("--add-opens");
+        command.add("java.base/sun.security.ssl=ALL-UNNAMED");
+
+        // Добавляем natives путь, если существует
         File nativesDir = new File(gameDir, "natives");
         if (nativesDir.exists()) {
             command.add("-Djava.library.path=" + nativesDir.getAbsolutePath());
         }
 
+        // Собираем classpath только из библиотек (без клиентского JAR)
+        StringBuilder classpath = new StringBuilder();
+        collectLibraries(new File(gameDir, "libraries"), classpath);
+
+        // УБИРАЕМ добавление клиентского JAR, так как он уже включен в libraries
+        // File clientJar = findClientJar(gameDir);
+        // if (clientJar != null) {
+        //     if (classpath.length() > 0) {
+        //         classpath.append(File.pathSeparator);
+        //     }
+        //     classpath.append(clientJar.getAbsolutePath());
+        // }
+
         command.add("-cp");
         command.add(classpath.toString());
 
-        // Изменяем главный класс для NeoForge
-        command.add("io.github.zekerzhayard.forgewrapper.installer.Main");
+        // Главный класс как в PolyMC
+        command.add("cpw.mods.bootstraplauncher.BootstrapLauncher");
 
-        // Базовые параметры Minecraft
+        // Аргументы командной строки как в PolyMC
         command.add("--username");
         command.add(username);
         command.add("--version");
@@ -547,8 +584,6 @@ public class Launcher extends JFrame {
         command.add("offline");
         command.add("--versionType");
         command.add("release");
-
-        // Специфичные параметры NeoForge
         command.add("--fml.neoForgeVersion");
         command.add("21.1.203");
         command.add("--fml.fmlVersion");
@@ -566,7 +601,7 @@ public class Launcher extends JFrame {
 
         appendToConsole("Запуск Minecraft с Java: " + javaPath + "\n");
         appendToConsole("Используется UUID: " + offlineUUID.toString() + "\n");
-        appendToConsole("Главный класс: io.github.zekerzhayard.forgewrapper.installer.Main\n");
+        appendToConsole("Главный класс: cpw.mods.bootstraplauncher.BootstrapLauncher\n");
 
         ProcessBuilder pb = new ProcessBuilder(command);
         pb.directory(gameDir);
@@ -621,6 +656,7 @@ public class Launcher extends JFrame {
         }
     }
 
+    // Этот метод больше не используется, но оставлен на случай необходимости
     private File findClientJar(File gameDir) {
         File[] possiblePaths = {
                 new File(gameDir, "libraries/com/mojang/minecraft/1.21.1/minecraft-1.21.1-client.jar"),
@@ -647,6 +683,21 @@ public class Launcher extends JFrame {
     }
 
     public static void main(String[] args) {
+        // Проверяем версию Java, на которой запущен лаунчер
+        String javaVersion = System.getProperty("java.version");
+        if (javaVersion != null && !javaVersion.startsWith("21")) {
+            JOptionPane.showMessageDialog(null,
+                    "Лаунчер должен быть запущен на Java 21!\n" +
+                            "Текущая версия Java: " + javaVersion + "\n\n" +
+                            "Пожалуйста, скачайте и установите Java 21 с официального сайта:\n" +
+                            "https://www.oracle.com/java/technologies/javase/jdk21-archive-downloads.html\n" +
+                            "или\n" +
+                            "https://adoptium.net/temurin/releases/?version=21",
+                    "Ошибка: Неправильная версия Java",
+                    JOptionPane.ERROR_MESSAGE);
+            System.exit(1);
+        }
+
         SwingUtilities.invokeLater(() -> {
             try {
                 UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
