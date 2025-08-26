@@ -190,6 +190,9 @@ public class Launcher extends JFrame {
             }
         }
 
+        // Remove duplicates
+        possibleJavaPaths = new ArrayList<>(new java.util.LinkedHashSet<>(possibleJavaPaths));
+
         for (String path : possibleJavaPaths) {
             File javaFile = new File(path);
             if (javaFile.exists()) {
@@ -412,7 +415,7 @@ public class Launcher extends JFrame {
             long localFileSize = outputFile.length();
             appendToConsole("Размер локального файла: " + localFileSize + " байт\n");
 
-            if (localSize == serverFileSize) {
+            if (localFileSize == serverFileSize) {
                 appendToConsole("Файл актуален, пропускаем скачивание\n");
                 progressBar.setValue(100);
                 return;
@@ -546,21 +549,14 @@ public class Launcher extends JFrame {
             command.add("-Djava.library.path=" + nativesDir.getAbsolutePath());
         }
 
-        // Собираем classpath только из библиотек (без клиентского JAR)
-        StringBuilder classpath = new StringBuilder();
-        collectLibraries(new File(gameDir, "libraries"), classpath);
+        // Собираем module-path из библиотек
+        StringBuilder modulePath = new StringBuilder();
+        collectLibraries(new File(gameDir, "libraries"), modulePath);
 
-        // УБИРАЕМ добавление клиентского JAR, так как он уже включен в libraries
-        // File clientJar = findClientJar(gameDir);
-        // if (clientJar != null) {
-        //     if (classpath.length() > 0) {
-        //         classpath.append(File.pathSeparator);
-        //     }
-        //     classpath.append(clientJar.getAbsolutePath());
-        // }
-
-        command.add("-cp");
-        command.add(classpath.toString());
+        command.add("--module-path");
+        command.add(modulePath.toString());
+        command.add("--add-modules");
+        command.add("ALL-MODULE-PATH");
 
         // Главный класс как в PolyMC
         command.add("cpw.mods.bootstraplauncher.BootstrapLauncher");
@@ -638,48 +634,22 @@ public class Launcher extends JFrame {
         dispose();
     }
 
-    private void collectLibraries(File dir, StringBuilder classpath) {
+    private void collectLibraries(File dir, StringBuilder pathBuilder) {
         if (!dir.exists()) return;
 
         File[] files = dir.listFiles();
         if (files != null) {
             for (File file : files) {
                 if (file.isDirectory()) {
-                    collectLibraries(file, classpath);
+                    collectLibraries(file, pathBuilder);
                 } else if (file.getName().endsWith(".jar")) {
-                    if (classpath.length() > 0) {
-                        classpath.append(File.pathSeparator);
+                    if (pathBuilder.length() > 0) {
+                        pathBuilder.append(File.pathSeparator);
                     }
-                    classpath.append(file.getAbsolutePath());
+                    pathBuilder.append(file.getAbsolutePath());
                 }
             }
         }
-    }
-
-    // Этот метод больше не используется, но оставлен на случай необходимости
-    private File findClientJar(File gameDir) {
-        File[] possiblePaths = {
-                new File(gameDir, "libraries/com/mojang/minecraft/1.21.1/minecraft-1.21.1-client.jar"),
-                new File(gameDir, "minecraft-client.jar"),
-                new File(gameDir, "client.jar"),
-                new File(gameDir, "minecraft.jar")
-        };
-
-        for (File path : possiblePaths) {
-            if (path.exists()) {
-                return path;
-            }
-        }
-
-        File librariesDir = new File(gameDir, "libraries");
-        if (librariesDir.exists()) {
-            File[] files = librariesDir.listFiles((dir, name) -> name.endsWith(".jar"));
-            if (files != null && files.length > 0) {
-                return files[0];
-            }
-        }
-
-        return null;
     }
 
     public static void main(String[] args) {
