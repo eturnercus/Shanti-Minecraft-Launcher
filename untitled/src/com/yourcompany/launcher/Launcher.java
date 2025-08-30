@@ -67,8 +67,7 @@ public class Launcher extends JFrame {
             public void mouseClicked(java.awt.event.MouseEvent evt) {
                 try {
                     java.awt.Desktop.getDesktop().browse(
-                            new java.net.URI("https://github.com/eturnercus/test")
-                    );
+                            new java.net.URI("https://github.com/eturnercus/test"));
                 } catch (Exception ex) {
                     appendToConsole("Ошибка открытия ссылки: " + ex.getMessage() + "\n");
                 }
@@ -85,13 +84,17 @@ public class Launcher extends JFrame {
         gbc.insets = new Insets(5, 5, 5, 5);
         gbc.fill = GridBagConstraints.HORIZONTAL;
 
-        gbc.gridx = 0; gbc.gridy = 0;
+        gbc.gridx = 0;
+        gbc.gridy = 0;
         centerPanel.add(new JLabel("Username:"), gbc);
 
-        gbc.gridx = 1; gbc.gridy = 0;
+        gbc.gridx = 1;
+        gbc.gridy = 0;
         centerPanel.add(usernameField, gbc);
 
-        gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 2;
+        gbc.gridx = 0;
+        gbc.gridy = 1;
+        gbc.gridwidth = 2;
         gbc.anchor = GridBagConstraints.CENTER;
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 0));
         buttonPanel.add(launchButton);
@@ -291,20 +294,7 @@ public class Launcher extends JFrame {
                 }
 
                 if (needsUpdate) {
-                    if (gameDir.exists()) {
-                        appendToConsole("Удаляем старую папку...\n");
-                        deleteRecursive(gameDir);
-                    }
-
-                    gameDir.mkdirs();
-                    appendToConsole("Создана папка: " + minecraftPath + "\n");
-
-                    downloadClientWithProgress(CLIENT_ZIP_URL, clientZip);
-                    appendToConsole("Распаковка архива...\n");
-                    unzipFile(clientZip, gameDir);
-
-                    // Удаляем конфликтующие версии библиотек после распаковки
-                    removeConflictLibraries(new File(gameDir, "libraries"));
+                    // Сделать обновление модов и конфигов
                 }
 
                 appendToConsole("Запуск игры...\n");
@@ -321,7 +311,8 @@ public class Launcher extends JFrame {
 
     // Метод для удаления конфликтующих библиотек
     private void removeConflictLibraries(File librariesDir) {
-        if (!librariesDir.exists()) return;
+        if (!librariesDir.exists())
+            return;
 
         // Удаляем старую версию ASM (9.3), которая конфликтует с новой (9.8)
         File asm93Dir = new File(librariesDir, "org/ow2/asm/asm/9.3");
@@ -403,7 +394,7 @@ public class Launcher extends JFrame {
         file.delete();
     }
 
-    private void downloadClientWithProgress(String urlStr, File outputFile) throws Exception {
+    private void DownloadModsWithProgress(String urlStr, File outputFile) throws Exception {
         URL url = new URL(urlStr);
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
 
@@ -426,7 +417,7 @@ public class Launcher extends JFrame {
 
         conn = (HttpURLConnection) url.openConnection();
         try (InputStream in = conn.getInputStream();
-             FileOutputStream out = new FileOutputStream(outputFile)) {
+                FileOutputStream out = new FileOutputStream(outputFile)) {
 
             byte[] buffer = new byte[8192];
             int bytesRead;
@@ -466,7 +457,7 @@ public class Launcher extends JFrame {
         }
     }
 
-    private void unzipFile(File zipFile, File outputDir) throws IOException {
+    private void UnZipFile(File zipFile, File outputDir) throws IOException {
         byte[] buffer = new byte[1024];
 
         try (ZipInputStream zis = new ZipInputStream(new FileInputStream(zipFile))) {
@@ -663,7 +654,8 @@ public class Launcher extends JFrame {
 
     // Метод для сбора библиотек
     private void collectLibraries(File dir, Set<String> classpath) {
-        if (!dir.exists()) return;
+        if (!dir.exists())
+            return;
 
         File[] files = dir.listFiles();
         if (files != null) {
