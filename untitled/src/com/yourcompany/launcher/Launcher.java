@@ -20,6 +20,7 @@ public class Launcher extends JFrame {
     private JTextField usernameField;
     private JButton launchButton;
     private JButton tempLaunchButton;
+    private JButton forceUpdateButton;
     private JTextArea consoleArea;
     private JProgressBar progressBar;
     private JLabel linkLabel;
@@ -29,7 +30,7 @@ public class Launcher extends JFrame {
 
     public Launcher() {
         setTitle("Minecraft Launcher");
-        setSize(500, 400);
+        setSize(600, 500);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
 
@@ -52,7 +53,10 @@ public class Launcher extends JFrame {
         tempLaunchButton = new JButton("Временный запуск");
         tempLaunchButton.addActionListener(this::tempLaunchGame);
 
-        consoleArea = new JTextArea(5, 30);
+        forceUpdateButton = new JButton("Принудительное обновление");
+        forceUpdateButton.addActionListener(this::forceUpdateGame);
+
+        consoleArea = new JTextArea(8, 40);
         consoleArea.setEditable(false);
         consoleArea.setBackground(Color.BLACK);
         consoleArea.setForeground(Color.GREEN);
@@ -67,7 +71,7 @@ public class Launcher extends JFrame {
             public void mouseClicked(java.awt.event.MouseEvent evt) {
                 try {
                     java.awt.Desktop.getDesktop().browse(
-                            new java.net.URI("https://github.com/eturnercus/test")
+                            new java.net.URI("https://github.com/eturnercus/Shanti-Minecraft-Launcher")
                     );
                 } catch (Exception ex) {
                     appendToConsole("Ошибка открытия ссылки: " + ex.getMessage() + "\n");
@@ -96,13 +100,14 @@ public class Launcher extends JFrame {
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 0));
         buttonPanel.add(launchButton);
         buttonPanel.add(tempLaunchButton);
+        buttonPanel.add(forceUpdateButton);
         centerPanel.add(buttonPanel, gbc);
 
         JPanel linkPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
         linkPanel.add(linkLabel);
 
         JPanel consolePanel = new JPanel(new BorderLayout());
-        consolePanel.setPreferredSize(new Dimension(400, 120));
+        consolePanel.setPreferredSize(new Dimension(500, 150));
         consolePanel.add(new JLabel("Консоль:"), BorderLayout.NORTH);
         consolePanel.add(new JScrollPane(consoleArea), BorderLayout.CENTER);
         consolePanel.add(progressBar, BorderLayout.SOUTH);
@@ -214,6 +219,7 @@ public class Launcher extends JFrame {
 
         launchButton.setEnabled(false);
         tempLaunchButton.setEnabled(false);
+        forceUpdateButton.setEnabled(false);
 
         JOptionPane.showMessageDialog(this,
                 "Java 21 не найдена!\n\n" +
@@ -265,6 +271,7 @@ public class Launcher extends JFrame {
 
         launchButton.setEnabled(false);
         tempLaunchButton.setEnabled(false);
+        forceUpdateButton.setEnabled(false);
         consoleArea.setText("");
 
         new Thread(() -> {
@@ -291,20 +298,7 @@ public class Launcher extends JFrame {
                 }
 
                 if (needsUpdate) {
-                    if (gameDir.exists()) {
-                        appendToConsole("Удаляем старую папку...\n");
-                        deleteRecursive(gameDir);
-                    }
-
-                    gameDir.mkdirs();
-                    appendToConsole("Создана папка: " + minecraftPath + "\n");
-
-                    downloadClientWithProgress(CLIENT_ZIP_URL, clientZip);
-                    appendToConsole("Распаковка архива...\n");
-                    unzipFile(clientZip, gameDir);
-
-                    // Удаляем конфликтующие версии библиотек после распаковки
-                    removeConflictLibraries(new File(gameDir, "libraries"));
+                    downloadAndSetupGame(gameDir, clientZip);
                 }
 
                 appendToConsole("Запуск игры...\n");
@@ -313,15 +307,79 @@ public class Launcher extends JFrame {
             } catch (Exception ex) {
                 appendToConsole("Ошибка: " + ex.getMessage() + "\n");
                 ex.printStackTrace();
-                launchButton.setEnabled(true);
-                tempLaunchButton.setEnabled(true);
+                SwingUtilities.invokeLater(() -> {
+                    launchButton.setEnabled(true);
+                    tempLaunchButton.setEnabled(true);
+                    forceUpdateButton.setEnabled(true);
+                });
             }
         }).start();
+    }
+
+    private void forceUpdateGame(ActionEvent e) {
+        String username = usernameField.getText().trim();
+        if (username.isEmpty()) {
+            appendToConsole("Ошибка: Введите ник!\n");
+            return;
+        }
+
+        saveUsername();
+
+        if (javaPath == null) {
+            appendToConsole("Ошибка: Java 21 не найдена!\n");
+            return;
+        }
+
+        launchButton.setEnabled(false);
+        tempLaunchButton.setEnabled(false);
+        forceUpdateButton.setEnabled(false);
+        consoleArea.setText("");
+
+        new Thread(() -> {
+            try {
+                File gameDir = new File(minecraftPath);
+                File clientZip = new File(minecraftPath + "/client.zip");
+
+                appendToConsole("Принудительное обновление...\n");
+                downloadAndSetupGame(gameDir, clientZip);
+
+                appendToConsole("Запуск игры...\n");
+                launchMinecraft(gameDir, username);
+
+            } catch (Exception ex) {
+                appendToConsole("Ошибка: " + ex.getMessage() + "\n");
+                ex.printStackTrace();
+                SwingUtilities.invokeLater(() -> {
+                    launchButton.setEnabled(true);
+                    tempLaunchButton.setEnabled(true);
+                    forceUpdateButton.setEnabled(true);
+                });
+            }
+        }).start();
+    }
+
+    private void downloadAndSetupGame(File gameDir, File clientZip) throws Exception {
+        if (gameDir.exists()) {
+            appendToConsole("Удаляем старую папку...\n");
+            deleteRecursive(gameDir);
+        }
+
+        gameDir.mkdirs();
+        appendToConsole("Создана папка: " + minecraftPath + "\n");
+
+        downloadClientWithProgress(CLIENT_ZIP_URL, clientZip);
+        appendToConsole("Распаковка архива...\n");
+        unzipFile(clientZip, gameDir);
+
+        // Удаляем конфликтующие версии библиотек после распаковки
+        removeConflictLibraries(new File(gameDir, "libraries"));
     }
 
     // Метод для удаления конфликтующих библиотек
     private void removeConflictLibraries(File librariesDir) {
         if (!librariesDir.exists()) return;
+
+        appendToConsole("Поиск конфликтующих библиотек...\n");
 
         // Удаляем старую версию ASM (9.3), которая конфликтует с новой (9.8)
         File asm93Dir = new File(librariesDir, "org/ow2/asm/asm/9.3");
@@ -331,6 +389,16 @@ public class Launcher extends JFrame {
         }
 
         // Удаляем старые версии Guava, которые могут конфликтовать
+        removeOldGuavaVersions(librariesDir);
+
+        // Удаляем другие потенциально конфликтующие библиотеки
+        removeOtherConflictLibraries(librariesDir);
+
+        appendToConsole("Очистка библиотек завершена!\n");
+    }
+
+    private void removeOldGuavaVersions(File librariesDir) {
+        // Ищем все версии Guava и удаляем все, кроме 32.1.2-jre
         File guavaDir = new File(librariesDir, "com/google/guava");
         if (guavaDir.exists() && guavaDir.isDirectory()) {
             File[] versions = guavaDir.listFiles();
@@ -340,7 +408,57 @@ public class Launcher extends JFrame {
                     if (!versionDir.getName().equals("32.1.2-jre")) {
                         appendToConsole("Удаляем конфликтующую версию Guava: " + versionDir.getName() + "\n");
                         deleteRecursive(versionDir);
+                    } else {
+                        appendToConsole("Оставляем правильную версию Guava: " + versionDir.getName() + "\n");
                     }
+                }
+            }
+        }
+
+        // Дополнительно ищем Guava в других возможных путях
+        removeOtherGuavaVersions(librariesDir, "com/google/guava/guava", "32.1.2-jre");
+    }
+
+    private void removeOtherConflictLibraries(File librariesDir) {
+        // Удаляем другие потенциально конфликтующие библиотеки
+        // Например, старые версии Gson, которые могут конфликтовать
+        File gsonDir = new File(librariesDir, "com/google/code/gson");
+        if (gsonDir.exists() && gsonDir.isDirectory()) {
+            File[] versions = gsonDir.listFiles();
+            if (versions != null) {
+                for (File versionDir : versions) {
+                    // Оставляем только актуальные версии Gson
+                    if (versionDir.getName().startsWith("2.8") && !versionDir.getName().startsWith("2.8.9")) {
+                        appendToConsole("Удаляем старую версию Gson: " + versionDir.getName() + "\n");
+                        deleteRecursive(versionDir);
+                    }
+                }
+            }
+        }
+    }
+
+    private void removeOtherGuavaVersions(File librariesDir, String guavaPath, String keepVersion) {
+        File guavaDir = new File(librariesDir, guavaPath);
+        if (guavaDir.exists() && guavaDir.isDirectory()) {
+            File[] versions = guavaDir.listFiles();
+            if (versions != null) {
+                for (File versionDir : versions) {
+                    if (versionDir.isDirectory() && !versionDir.getName().equals(keepVersion)) {
+                        appendToConsole("Удаляем конфликтующую версию Guava: " + versionDir.getName() + " в " + guavaPath + "\n");
+                        deleteRecursive(versionDir);
+                    }
+                }
+                // После удаления выведем оставшиеся версии
+                versions = guavaDir.listFiles();
+                if (versions == null || versions.length == 0) {
+                    appendToConsole("В папке " + guavaPath + " не осталось версий Guava\n");
+                } else {
+                    StringBuilder sb = new StringBuilder();
+                    for (File versionDir : versions) {
+                        if (sb.length() > 0) sb.append(", ");
+                        sb.append(versionDir.getName());
+                    }
+                    appendToConsole("Оставшиеся версии Guava в " + guavaPath + ": " + sb.toString() + "\n");
                 }
             }
         }
@@ -516,31 +634,40 @@ public class Launcher extends JFrame {
         command.add("-Xmx4096m");
         command.add("-Duser.language=en");
         command.add("-Djava.net.preferIPv4Stack=true");
-        command.add("-Dfml.earlyprogresswindow=false");
 
         // Добавляем аргументы для обхода ограничений модульной системы
+        command.add("--add-modules");
+        command.add("ALL-MODULE-PATH");
         command.add("--add-opens");
         command.add("java.base/java.lang=ALL-UNNAMED");
         command.add("--add-opens");
-        command.add("java.base/java.lang.invoke=ALL-UNNAMED");
-        command.add("--add-opens");
-        command.add("java.base/java.lang.reflect=ALL-UNNAMED");
+        command.add("java.base/java.nio=ALL-UNNAMED");
         command.add("--add-opens");
         command.add("java.base/java.io=ALL-UNNAMED");
         command.add("--add-opens");
-        command.add("java.base/java.net=ALL-UNNAMED");
-        command.add("--add-opens");
-        command.add("java.base/java.nio=ALL-UNNAMED");
-        command.add("--add-opens");
         command.add("java.base/java.util=ALL-UNNAMED");
+        command.add("--add-opens");
+        command.add("java.base/java.util.stream=ALL-UNNAMED");
+        command.add("--add-opens");
+        command.add("java.base/java.util.function=ALL-UNNAMED");
         command.add("--add-opens");
         command.add("java.base/java.util.concurrent=ALL-UNNAMED");
         command.add("--add-opens");
-        command.add("java.base/java.util.concurrent.atomic=ALL-UNNAMED");
+        command.add("java.base/java.time=ALL-UNNAMED");
         command.add("--add-opens");
-        command.add("java.base/sun.nio.ch=ALL-UNNAMED");
+        command.add("java.base/java.text=ALL-UNNAMED");
         command.add("--add-opens");
-        command.add("java.base/sun.security.ssl=ALL-UNNAMED");
+        command.add("java.base/java.math=ALL-UNNAMED");
+        command.add("--add-opens");
+        command.add("java.base/java.net=ALL-UNNAMED");
+        command.add("--add-opens");
+        command.add("java.base/java.security=ALL-UNNAMED");
+        command.add("--add-opens");
+        command.add("java.base/java.security.cert=ALL-UNNAMED");
+        command.add("--add-opens");
+        command.add("java.base/sun.security.util=ALL-UNNAMED");
+        command.add("--add-exports");
+        command.add("java.base/sun.security.util=ALL-UNNAMED");
 
         // Добавляем natives путь
         File nativesDir = new File(gameDir, "natives");
@@ -552,16 +679,39 @@ public class Launcher extends JFrame {
         Set<String> classpathSet = new LinkedHashSet<>();
         collectLibraries(new File(gameDir, "libraries"), classpathSet);
 
-        // Преобразуем Set в строку classpath
+        // Добавляем клиентский JAR (новый путь из логов)
+        File clientJar = new File(gameDir, "libraries/net/minecraft/client/1.21.1-20240808.144430/client-1.21.1-20240808.144430-srg.jar");
+        if (clientJar.exists()) {
+            classpathSet.add(clientJar.getAbsolutePath());
+        } else {
+            appendToConsole("Ошибка: Основной jar файл не найден!\n");
+            SwingUtilities.invokeLater(() -> {
+                launchButton.setEnabled(true);
+                tempLaunchButton.setEnabled(true);
+                forceUpdateButton.setEnabled(true);
+            });
+            return;
+        }
+
         String classpath = String.join(File.pathSeparator, classpathSet);
 
         command.add("-cp");
         command.add(classpath);
 
-        // Главный класс как в PolyMC
-        command.add("io.github.zekerzhayard.forgewrapper.installer.Main");
+        // Главный класс (из логов)
+        command.add("cpw.mods.bootstraplauncher.BootstrapLauncher");
 
-        // Аргументы командной строки как в PolyMC
+        // Аргументы командной строки (адаптированы под логи)
+        command.add("--launchTarget");
+        command.add("neoforgeclient");
+        command.add("--fml.forgeVersion");
+        command.add("21.1.204");
+        command.add("--fml.mcVersion");
+        command.add("1.21.1");
+        command.add("--fml.forgeGroup");
+        command.add("net.neoforged");
+        command.add("--fml.mcpVersion");
+        command.add("20240808.144430");
         command.add("--username");
         command.add(username);
         command.add("--version");
@@ -580,26 +730,14 @@ public class Launcher extends JFrame {
         command.add("offline");
         command.add("--versionType");
         command.add("release");
-        command.add("--fml.neoForgeVersion");
-        command.add("21.1.204");
-        command.add("--fml.fmlVersion");
-        command.add("4.0.41");
-        command.add("--fml.mcVersion");
-        command.add("1.21.1");
-        command.add("--fml.neoFormVersion");
-        command.add("20240808.144430");
-        command.add("--launchTarget");
-        command.add("forgeclient");
         command.add("--width");
         command.add("854");
         command.add("--height");
         command.add("480");
-        command.add("--fullscreen");
-        command.add("false");
 
         appendToConsole("Запуск Minecraft с Java: " + javaPath + "\n");
         appendToConsole("Используется UUID: " + offlineUUID.toString() + "\n");
-        appendToConsole("Главный класс: io.github.zekerzhayard.forgewrapper.installer.Main\n");
+        appendToConsole("Команда запуска: " + String.join(" ", command) + "\n");
 
         ProcessBuilder pb = new ProcessBuilder(command);
         pb.directory(gameDir);
@@ -610,58 +748,37 @@ public class Launcher extends JFrame {
         try {
             Process process = pb.start();
 
-            // Отдельные потоки для stdout и stderr
-            Thread outputThread = new Thread(() -> {
-                try (BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(process.getInputStream()))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        appendToConsole("[GAME] " + line + "\n");
-                    }
-                } catch (IOException e) {
-                    appendToConsole("Ошибка чтения вывода: " + e.getMessage() + "\n");
-                }
-            });
+            // Читаем вывод процесса
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                appendToConsole(line + "\n");
+            }
 
-            Thread errorThread = new Thread(() -> {
-                try (BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(process.getErrorStream()))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        appendToConsole("[ERROR] " + line + "\n");
-                    }
-                } catch (IOException e) {
-                    appendToConsole("Ошибка чтения ошибок: " + e.getMessage() + "\n");
-                }
-            });
-
-            outputThread.start();
-            errorThread.start();
-
-            // Ждем завершения процесса
             int exitCode = process.waitFor();
-            outputThread.join();
-            errorThread.join();
-
             appendToConsole("Процесс завершился с кодом: " + exitCode + "\n");
 
-            if (exitCode != 0) {
-                appendToConsole("Запуск игры завершился с ошибкой\n");
-            } else {
-                appendToConsole("Игра завершена успешно\n");
-            }
+            // Включаем кнопки после завершения процесса
+            SwingUtilities.invokeLater(() -> {
+                launchButton.setEnabled(true);
+                tempLaunchButton.setEnabled(true);
+                forceUpdateButton.setEnabled(true);
+            });
 
         } catch (Exception ex) {
             appendToConsole("Ошибка при запуске процесса: " + ex.getMessage() + "\n");
             ex.printStackTrace();
-        }
 
-        // Не закрываем лаунчер автоматически
-        launchButton.setEnabled(true);
-        tempLaunchButton.setEnabled(true);
+            // Включаем кнопки в случае ошибки
+            SwingUtilities.invokeLater(() -> {
+                launchButton.setEnabled(true);
+                tempLaunchButton.setEnabled(true);
+                forceUpdateButton.setEnabled(true);
+            });
+        }
     }
 
-    // Метод для сбора библиотек
+    // Обновленный метод collectLibraries с использованием Set для избежания дубликатов
     private void collectLibraries(File dir, Set<String> classpath) {
         if (!dir.exists()) return;
 
@@ -672,6 +789,7 @@ public class Launcher extends JFrame {
                     collectLibraries(file, classpath);
                 } else if (file.getName().endsWith(".jar")) {
                     classpath.add(file.getAbsolutePath());
+                    appendToConsole("Добавлена библиотека: " + file.getName() + "\n");
                 }
             }
         }
